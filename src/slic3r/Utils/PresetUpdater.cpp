@@ -561,7 +561,7 @@ void PresetUpdater::priv::perform_updates(Updates &&updates, bool snapshot) cons
 			BOOST_LOG_TRIVIAL(info) << '\t' << incompat;
 			incompat.remove();
 		}
-	} else if (updates.updates.size() > 0) {
+	} else if (updates.updates.size() >= 0) {
 		if (snapshot) {
 			BOOST_LOG_TRIVIAL(info) << "Taking a snapshot...";
 			SnapshotDB::singleton().take_snapshot(*GUI::wxGetApp().app_config, Snapshot::SNAPSHOT_UPGRADE);
@@ -673,9 +673,11 @@ PresetUpdater::UpdateResult PresetUpdater::config_update(const Semver &old_slic3
 	if (! p->enabled_config_update) { return R_NOOP; }
 
 	auto updates = p->get_config_updates(old_slic3r_version);
-	if (updates.incompats.size() > 0) {
+	if (updates.incompats.size() >= 0) {
 		BOOST_LOG_TRIVIAL(info) << boost::format("%1% bundles incompatible. Asking for action...") % updates.incompats.size();
 
+		bool min_mismatch = true;
+		bool max_mismatch = false;
 		std::unordered_map<std::string, wxString> incompats_map;
 		for (const auto &incompat : updates.incompats) {
 			const auto min_slic3r = incompat.version.min_slic3r_version;
@@ -688,31 +690,61 @@ PresetUpdater::UpdateResult PresetUpdater::config_update(const Semver &old_slic3
 				);
 			} else if (min_slic3r != Semver::zero()) {
 				restrictions = wxString::Format(_(L("requires min. %s")), min_slic3r.to_string());
+				min_mismatch = true;
 			} else {
 				restrictions = wxString::Format(_(L("requires max. %s")), max_slic3r.to_string());
+				max_mismatch = true;
 			}
 
 			incompats_map.emplace(std::make_pair(incompat.vendor, std::move(restrictions)));
 		}
 
-		GUI::MsgDataIncompatible dlg(std::move(incompats_map));
-		const auto res = dlg.ShowModal();
-		if (res == wxID_REPLACE) {
-			BOOST_LOG_TRIVIAL(info) << "User wants to re-configure...";
+		if (max_mismatch){
+			GUI::MsgDataIncompatible dlg(std::move(incompats_map));
+			const auto res = dlg.ShowModal();
+			if (res == wxID_REPLACE) {
+				BOOST_LOG_TRIVIAL(info) << "User wants to re-configure...";
 
-			// This effectively removes the incompatible bundles:
-			// (snapshot is taken beforehand)
-			p->perform_updates(std::move(updates));
+				// This effectively removes the incompatible bundles:
+				// (snapshot is taken beforehand)
+				p->perform_updates(std::move(updates));
 
-			if (! GUI::wxGetApp().run_wizard(GUI::ConfigWizard::RR_DATA_INCOMPAT)) {
+				if (!GUI::wxGetApp().run_wizard(GUI::ConfigWizard::RR_DATA_INCOMPAT)) {
+					return R_INCOMPAT_EXIT;
+				}
+
+				return R_INCOMPAT_CONFIGURED;
+			}
+			else {
+				BOOST_LOG_TRIVIAL(info) << "User wants to exit Slic3r, bye...";
+				return R_INCOMPAT_EXIT;
+			}
+		}else if(min_mismatch)
+		{
+			
+
+			GUI::MsgUpdateForced dlg(std::move(incompats_map));
+
+			const auto res = dlg.ShowModal();
+			if (res == wxID_OK) {
+				BOOST_LOG_TRIVIAL(debug) << "User agreed to perform the update";
+				
+				p->perform_updates(std::move(updates));
+
+				// Reload global configuration
+				auto* app_config = GUI::wxGetApp().app_config;
+				GUI::wxGetApp().preset_bundle->load_presets(*app_config);
+				GUI::wxGetApp().load_current_presets();
+				return R_UPDATE_INSTALLED;
+			}
+			else {
+				BOOST_LOG_TRIVIAL(info) << "User did not finnish configure wizard.";
 				return R_INCOMPAT_EXIT;
 			}
 
 			return R_INCOMPAT_CONFIGURED;
-		} else {
-			BOOST_LOG_TRIVIAL(info) << "User wants to exit Slic3r, bye...";
-			return R_INCOMPAT_EXIT;
 		}
+		
 	} else if (updates.updates.size() > 0) {
 		BOOST_LOG_TRIVIAL(info) << boost::format("Update of %1% bundles available. Asking for confirmation ...") % updates.updates.size();
 

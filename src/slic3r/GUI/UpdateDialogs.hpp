@@ -63,6 +63,19 @@ public:
 };
 
 // Informs about currently installed bundles not being compatible with the running Slic3r. Asks about action.
+class MsgUpdateForced : public MsgDialog
+{
+public:
+
+	MsgUpdateForced(const std::unordered_map<std::string, wxString>& incompats);
+	MsgUpdateForced(MsgUpdateForced&&) = delete;
+	MsgUpdateForced(const MsgUpdateForced&) = delete;
+	MsgUpdateForced& operator=(MsgUpdateForced&&) = delete;
+	MsgUpdateForced& operator=(const MsgUpdateForced&) = delete;
+	~MsgUpdateForced();
+};
+
+// Informs about currently installed bundles not being compatible with the running Slic3r. Asks about action.
 class MsgDataIncompatible : public MsgDialog
 {
 public:
