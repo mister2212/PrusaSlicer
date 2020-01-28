@@ -238,15 +238,9 @@ if (MSVC AND "${CMAKE_SIZEOF_VOID_P}" STREQUAL "4") # 32 bit MSVC workaround
     set(_cgal_defines CGAL_DO_NOT_USE_MPZF)
 endif ()
 
-add_library(libslic3r_cgal OBJECT MeshBoolean.cpp MeshBoolean.hpp)
-target_include_directories(libslic3r_cgal PRIVATE
-    ${CMAKE_CURRENT_BINARY_DIR}
-    $<TARGET_PROPERTY:libigl,INTERFACE_INCLUDE_DIRECTORIES>
-    $<TARGET_PROPERTY:CGAL::CGAL,INTERFACE_INCLUDE_DIRECTORIES>)
-target_compile_definitions(libslic3r_cgal PRIVATE ${_cgal_defines}
-    $<TARGET_PROPERTY:CGAL::CGAL,INTERFACE_COMPILE_DEFINITIONS>)
-target_compile_options(libslic3r_cgal PRIVATE 
-    $<TARGET_PROPERTY:CGAL::CGAL,INTERFACE_COMPILE_OPTIONS>)
+add_library(libslic3r_cgal STATIC MeshBoolean.cpp MeshBoolean.hpp)
+target_include_directories(libslic3r_cgal PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_link_libraries(libslic3r_cgal PRIVATE CGAL::CGAL libigl)
 
 encoding_check(libslic3r)
 
@@ -268,7 +262,7 @@ target_link_libraries(libslic3r
     qhull
     semver
     TBB::tbb
-    $<TARGET_PROPERTY:CGAL::CGAL,INTERFACE_LINK_LIBRARIES>
+    libslic3r_cgal
     ${CMAKE_DL_LIBS}
     )
 
@@ -288,4 +282,4 @@ if (SLIC3R_PCH AND NOT SLIC3R_SYNTAXONLY)
     add_precompiled_header(libslic3r pchheader.hpp FORCEINCLUDE)
 endif ()
 
-target_sources(libslic3r PRIVATE $<TARGET_OBJECTS:libslic3r_cgal>)
+#target_sources(libslic3r PRIVATE $<TARGET_OBJECTS:libslic3r_cgal>)
